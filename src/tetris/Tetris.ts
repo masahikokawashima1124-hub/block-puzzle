@@ -1,4 +1,5 @@
-import { BASIC_PIECES, PIECES, getKicks, rotateCCW, rotateCW, type Matrix } from './pieces';
+import { BASIC_PIECES, PIECES, PIECE_STAGES, getKicks, rotateCCW, rotateCW, type Matrix } from './pieces';
+import { MAX_SP, SKILLS, SLOW_DURATION, type SkillDef, type SkillId } from './skills';
 
 // ゲームのルール本体。画面表示（Phaser）には依存しない。
 
@@ -26,6 +27,9 @@ export interface TetrisEvents {
   onLinesCleared?: (rows: number[]) => void;
   onLevelUp?: (level: number) => void;
   onGameOver?: () => void;
+  onSkillLearned?: (skill: SkillDef) => void;
+  onSkillUsed?: (id: SkillId) => void;
+  onNewPieces?: (ids: string[]) => void;
 }
 
 export class Tetris {
@@ -40,11 +44,14 @@ export class Tetris {
   elapsed = 0; // プレイ経過時間(ms)
   gameOver = false;
   softDropping = false;
+  sp = 0; // スキルポイント
+  slowUntil = 0; // スロー効果が切れる時刻（elapsed 基準）
 
   private events: TetrisEvents;
   private random: () => number;
   private pool: string[] = [...BASIC_PIECES]; // 出現するブロックの種類
   private bag: string[] = [];
+  private stageIndex = 0; // PIECE_STAGES のどこまで追加したか
   private gravityTimer = 0;
   private lockTimer = 0;
   private lockResets = 0;
@@ -62,6 +69,46 @@ export class Tetris {
     for (const id of ids) {
       if (PIECES[id] && !this.pool.includes(id)) this.pool.push(id);
     }
+  }
+
+  learnedSkills(): SkillDef[] {
+    return SKILLS.filter((s) => s.learnLevel <= this.level);
+  }
+
+  canUseSkill(id: SkillId): boolean {
+    const skill = SKILLS.find((s) => s.id === id);
+    return !!skill && !this.gameOver && skill.learnLevel <= this.level && this.sp >= skill.cost;
+  }
+
+  // スキルを使う。使えなかったら false（SP は減らない）
+  useSkill(id: SkillId): boolean {
+    if (!this.canUseSkill(id)) return false;
+    const skill = SKILLS.find((s) => s.id === id)!;
+    let ok = true;
+    switch (id) {
+      case 'bomb':
+        this.grid.splice(ROWS - 2, 2);
+        while (this.grid.length < ROWS) this.grid.unshift(Array<Cell>(COLS).fill(null));
+        break;
+      case 'slow':
+        this.slowUntil = this.elapsed + SLOW_DURATION;
+        break;
+      case 'change':
+        ok = this.changePiece('I');
+        break;
+      case 'gravity':
+        this.collapseColumns();
+        break;
+    }
+    if (!ok) return false;
+    this.sp -= skill.cost;
+    this.events.onSkillUsed?.(id);
+    if (id === 'gravity') this.clearLines(); // 詰めた結果そろった列も消す
+    return true;
+  }
+
+  isSlowed(): boolean {
+    return this.elapsed < this.slowUntil;
   }
 
   // ---- 操作 ----
@@ -112,6 +159,7 @@ export class Tetris {
   update(dt: number) {
     if (this.gameOver) return;
     this.elapsed += dt;
+    this.checkPieceStages();
     const interval = this.softDropping ? this.gravityInterval() / 20 : this.gravityInterval();
     this.gravityTimer += dt;
     while (this.gravityTimer >= interval) {
@@ -143,7 +191,8 @@ export class Tetris {
   // ---- 内部処理 ----
 
   private gravityInterval(): number {
-    return Math.pow(0.8 - (this.level - 1) * 0.007, this.level - 1) * 1000;
+    const base = Math.pow(0.8 - (this.level - 1) * 0.007, this.level - 1) * 1000;
+    return this.isSlowed() ? base * 2 : base;
   }
 
   private stepDown(): boolean {
@@ -207,12 +256,50 @@ export class Tetris {
 
     this.score += (LINE_SCORES[full.length] ?? LINE_SCORES[4] * (full.length - 3)) * this.level;
     this.lines += full.length;
+    this.sp = Math.min(MAX_SP, this.sp + full.length);
     this.events.onLinesCleared?.(full);
 
     const newLevel = Math.floor(this.lines / LINES_PER_LEVEL) + 1;
     if (newLevel > this.level) {
+      const oldLevel = this.level;
       this.level = newLevel;
       this.events.onLevelUp?.(newLevel);
+      for (const skill of SKILLS) {
+        if (skill.learnLevel > oldLevel && skill.learnLevel <= newLevel) this.events.onSkillLearned?.(skill);
+      }
+    }
+  }
+
+  private checkPieceStages() {
+    while (this.stageIndex < PIECE_STAGES.length && this.elapsed >= PIECE_STAGES[this.stageIndex].at) {
+      const { ids } = PIECE_STAGES[this.stageIndex++];
+      this.addPieceTypes(ids);
+      // 登場したことがすぐ分かるよう、NEXT の2番目以降に割り込ませる
+      ids.forEach((id, i) => this.queue.splice(1 + i, 0, id));
+      this.events.onNewPieces?.(ids);
+    }
+  }
+
+  // 今のブロックを別の形に変える。置ける場所がなければ false
+  private changePiece(type: string): boolean {
+    const matrix = PIECES[type].shape;
+    const { x, y } = this.piece;
+    for (const [dx, dy] of [[0, 0], [0, -1], [-1, 0], [1, 0], [0, -2], [-2, 0], [2, 0]]) {
+      if (!this.collides(matrix, x + dx, y + dy)) {
+        this.piece = { type, rotation: 0, matrix, x: x + dx, y: y + dy };
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // 各列のブロックを下に詰める
+  private collapseColumns() {
+    for (let c = 0; c < COLS; c++) {
+      const cells = this.grid.map((row) => row[c]).filter((cell) => cell !== null);
+      for (let r = 0; r < ROWS; r++) {
+        this.grid[r][c] = r >= ROWS - cells.length ? cells[r - (ROWS - cells.length)] : null;
+      }
     }
   }
 

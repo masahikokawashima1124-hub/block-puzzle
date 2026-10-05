@@ -34,7 +34,10 @@
 - ブロックの形は `src/tetris/pieces.ts` の PIECES に足し、`Tetris.addPieceTypes()` で出現させる。
 - 「テトリス」は商標なので、名前・ロゴ・公式風の見た目は使わない（タイトルは仮で BLOCK PUZZLE）。
 
-## 今後入れたい要素
-1. レベルが上がるとスキル（技）を覚える … `onLevelUp` から差し込む
-2. 時間が経つと落ちてくるブロックの形の種類が増える … `elapsed` と `addPieceTypes()` を使う
-3. 2人対戦（方式は検討中）
+## 独自要素
+- **スキル**：`src/tetris/skills.ts` に一覧（習得レベル・消費SP）。効果は `Tetris.useSkill()`。SPはライン1本で+1（最大10）。
+- **形が増える**：`src/tetris/pieces.ts` の PIECE_STAGES（プレイ時間で追加）。登場時は NEXT に割り込む。
+- 開発中はブラウザのコンソールで `window.game` からゲームを操作できる（公開版には含まれない）。
+
+## 今後の予定
+- 2人対戦：まず1台で対戦 → 楽しければ友達とオンライン対戦

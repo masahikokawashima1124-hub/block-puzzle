@@ -81,8 +81,59 @@ export const PIECES: Record<string, PieceDef> = {
   },
 };
 
+// ---- 時間経過で追加されるブロック ----
+const extra = (id: string, color: number, shape: Matrix): PieceDef => ({ id, color, shape, kicks: 'standard' });
+
+Object.assign(PIECES, {
+  I3: extra('I3', 0xe0aaff, [
+    [0, 0, 0],
+    [1, 1, 1],
+    [0, 0, 0],
+  ]),
+  U: extra('U', 0xa3e635, [
+    [1, 0, 1],
+    [1, 1, 1],
+    [0, 0, 0],
+  ]),
+  P: extra('P', 0xf4a261, [
+    [1, 1, 0],
+    [1, 1, 0],
+    [1, 0, 0],
+  ]),
+  V: extra('V', 0x2ec4b6, [
+    [1, 0, 0],
+    [1, 0, 0],
+    [1, 1, 1],
+  ]),
+  X: extra('X', 0xf78fb3, [
+    [0, 1, 0],
+    [1, 1, 1],
+    [0, 1, 0],
+  ]),
+  W: extra('W', 0xffb4a2, [
+    [1, 0, 0],
+    [1, 1, 0],
+    [0, 1, 1],
+  ]),
+  I5: extra('I5', 0x00b4d8, [
+    [0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0],
+    [1, 1, 1, 1, 1],
+    [0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0],
+  ]),
+});
+
 // 最初から出てくるブロック
 export const BASIC_PIECES = ['I', 'O', 'T', 'S', 'Z', 'J', 'L'];
+
+// プレイ時間に応じて追加されるブロック（at はミリ秒）
+export const PIECE_STAGES: { at: number; ids: string[] }[] = [
+  { at: 60_000, ids: ['I3', 'U'] },
+  { at: 120_000, ids: ['P', 'V'] },
+  { at: 180_000, ids: ['X', 'W'] },
+  { at: 240_000, ids: ['I5'] },
+];
 
 export function rotateCW(m: Matrix): Matrix {
   const n = m.length;

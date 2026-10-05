@@ -4,7 +4,7 @@ import { GAME_HEIGHT, GAME_WIDTH } from './config';
 import { TitleScene } from './scenes/TitleScene';
 import { GameScene } from './scenes/GameScene';
 
-new Phaser.Game({
+const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
   backgroundColor: '#1d1f2b',
@@ -21,3 +21,6 @@ new Phaser.Game({
   },
   scene: [TitleScene, GameScene],
 });
+
+// 開発中だけ、ブラウザのコンソールからゲームを調べられるようにする
+if (import.meta.env.DEV) (window as unknown as { game: Phaser.Game }).game = game;

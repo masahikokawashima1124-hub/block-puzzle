@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config';
 import { loadBest, saveBest } from '../storage';
 import { PIECES } from '../tetris/pieces';
+import { MAX_SP, SKILLS, type SkillDef, type SkillId } from '../tetris/skills';
 import { COLS, HIDDEN_ROWS, Tetris, VISIBLE_ROWS } from '../tetris/Tetris';
 
 // ---- レイアウト（基準 720x1280） ----
@@ -19,6 +20,10 @@ const BUTTON_H = 150;
 const HOLD_BOX = { y: BOARD_Y, h: 140 };
 const NEXT_BOX = { y: 270, h: 360 };
 const NEXT_COUNT = 3;
+const SP_Y = NEXT_BOX.y + NEXT_BOX.h + 16;
+const SKILL_Y = SP_Y + 64;
+const SKILL_H = 80;
+const SKILL_GAP = 13;
 
 // 押しっぱなしで連続移動するときの間隔(ms)
 const DAS = 170; // 連続移動が始まるまで
@@ -38,6 +43,11 @@ export class GameScene extends Phaser.Scene {
   private bestText!: Phaser.GameObjects.Text;
   private levelText!: Phaser.GameObjects.Text;
   private linesText!: Phaser.GameObjects.Text;
+  private spGfx!: Phaser.GameObjects.Graphics;
+  private spText!: Phaser.GameObjects.Text;
+  private slowText!: Phaser.GameObjects.Text;
+  private skillSlots: { skill: SkillDef; bg: Phaser.GameObjects.Rectangle; name: Phaser.GameObjects.Text; sub: Phaser.GameObjects.Text }[] = [];
+  private nextPopupAt = 0;
   private overlay?: Phaser.GameObjects.Container;
   private paused = false;
   private best = 0;
@@ -51,11 +61,19 @@ export class GameScene extends Phaser.Scene {
     this.paused = false;
     this.overlay = undefined;
     this.repeat = {};
+    this.skillSlots = [];
+    this.nextPopupAt = 0;
     this.best = loadBest();
     this.tetris = new Tetris({
       onLinesCleared: (rows) => this.onLinesCleared(rows),
       onLevelUp: (level) => this.popupText(`LEVEL ${level}`, '#ffd166'),
       onGameOver: () => this.showGameOver(),
+      onSkillLearned: (skill) => this.popupText(`スキル習得！\n${skill.name}`, '#7cf5ff', 44),
+      onSkillUsed: (id) => this.onSkillUsed(id),
+      onNewPieces: () => {
+        this.popupText('新ブロック登場！', '#f78fb3', 52);
+        this.cameras.main.flash(200, 247, 143, 179);
+      },
     });
 
     this.input.addPointer(2); // 2本指の同時押しに対応
@@ -64,6 +82,7 @@ export class GameScene extends Phaser.Scene {
     this.previewGfx = this.add.graphics();
     this.createTexts();
     this.createButtons();
+    this.createSkillPanel();
     this.setupKeyboard();
 
     // アプリ切替やタブ移動で自動的に一時停止
@@ -149,6 +168,8 @@ export class GameScene extends Phaser.Scene {
     kb.on('keydown', (e: KeyboardEvent) => {
       if (e.repeat) return;
       if (e.code === 'KeyP' || e.code === 'Escape') return this.setPaused(!this.paused);
+      const digit = /^Digit([1-9])$/.exec(e.code);
+      if (digit) return this.useSkill(SKILLS[Number(digit[1]) - 1]?.id);
       const action = map[e.code];
       if (action) this.press(action);
     });
@@ -226,14 +247,17 @@ export class GameScene extends Phaser.Scene {
     const style = { fontFamily: FONT, color: '#ffffff', fontStyle: 'bold' };
     this.add.text(BOARD_X, 18, 'SCORE', { ...style, fontSize: '20px', color: '#8a90b0' });
     this.scoreText = this.add.text(BOARD_X, 42, '0', { ...style, fontSize: '44px' });
-    this.add.text(320, 18, 'BEST', { ...style, fontSize: '20px', color: '#8a90b0' });
-    this.bestText = this.add.text(320, 42, String(this.best), { ...style, fontSize: '44px', color: '#ffd166' });
+    this.add.text(210, 18, 'BEST', { ...style, fontSize: '20px', color: '#8a90b0' });
+    this.bestText = this.add.text(210, 42, String(this.best), { ...style, fontSize: '44px', color: '#ffd166' });
+    this.add.text(395, 18, 'LV', { ...style, fontSize: '20px', color: '#8a90b0' });
+    this.levelText = this.add.text(395, 42, '1', { ...style, fontSize: '44px' });
+    this.add.text(480, 18, 'LINES', { ...style, fontSize: '20px', color: '#8a90b0' });
+    this.linesText = this.add.text(480, 42, '0', { ...style, fontSize: '44px' });
 
-    const statY = NEXT_BOX.y + NEXT_BOX.h + 30;
-    this.add.text(PANEL_X + 10, statY, 'LEVEL', { ...style, fontSize: '22px', color: '#8a90b0' });
-    this.levelText = this.add.text(PANEL_X + 10, statY + 28, '1', { ...style, fontSize: '48px' });
-    this.add.text(PANEL_X + 10, statY + 110, 'LINES', { ...style, fontSize: '22px', color: '#8a90b0' });
-    this.linesText = this.add.text(PANEL_X + 10, statY + 138, '0', { ...style, fontSize: '48px' });
+    this.slowText = this.add
+      .text(BOARD_X + BOARD_W / 2, BOARD_Y + 30, '', { ...style, fontSize: '30px', color: '#7cf5ff', stroke: '#000000', strokeThickness: 6 })
+      .setOrigin(0.5)
+      .setDepth(10);
   }
 
   private render() {
@@ -277,6 +301,64 @@ export class GameScene extends Phaser.Scene {
     this.levelText.setText(String(t.level));
     this.linesText.setText(String(t.lines));
     if (t.score > this.best) this.bestText.setText(String(t.score));
+    this.slowText.setText(t.isSlowed() ? `SLOW ${Math.ceil((t.slowUntil - t.elapsed) / 1000)}` : '');
+    this.renderSkillPanel();
+  }
+
+  // ---- スキル ----
+
+  private createSkillPanel() {
+    const style = { fontFamily: FONT, fontStyle: 'bold' };
+    this.add.text(PANEL_X, SP_Y, 'SP', { ...style, fontSize: '22px', color: '#8a90b0' });
+    this.spText = this.add.text(PANEL_X + PANEL_W, SP_Y, '', { ...style, fontSize: '22px', color: '#7cf5ff' }).setOrigin(1, 0);
+    this.spGfx = this.add.graphics();
+
+    SKILLS.forEach((skill, i) => {
+      const y = SKILL_Y + i * (SKILL_H + SKILL_GAP) + SKILL_H / 2;
+      const bg = this.add.rectangle(PANEL_X + PANEL_W / 2, y, PANEL_W, SKILL_H, 0x2b2f42).setStrokeStyle(3, COLOR_FRAME).setInteractive();
+      const name = this.add.text(PANEL_X + 12, y - 30, '', { ...style, fontSize: '28px', color: '#ffffff' });
+      const sub = this.add.text(PANEL_X + 12, y + 6, '', { ...style, fontSize: '20px', color: '#8a90b0' });
+      bg.on('pointerdown', () => this.useSkill(skill.id));
+      this.skillSlots.push({ skill, bg, name, sub });
+    });
+  }
+
+  private renderSkillPanel() {
+    const t = this.tetris;
+    const g = this.spGfx;
+    const barY = SP_Y + 30;
+    g.clear();
+    g.fillStyle(COLOR_BG).fillRect(PANEL_X, barY, PANEL_W, 20);
+    g.fillStyle(0x7cf5ff).fillRect(PANEL_X, barY, (PANEL_W * t.sp) / MAX_SP, 20);
+    g.lineStyle(2, COLOR_FRAME).strokeRect(PANEL_X, barY, PANEL_W, 20);
+    this.spText.setText(`${t.sp}/${MAX_SP}`);
+
+    for (const { skill, bg, name, sub } of this.skillSlots) {
+      const learned = skill.learnLevel <= t.level;
+      const usable = t.canUseSkill(skill.id);
+      name.setText(learned ? skill.name : '？？？').setColor(usable ? '#ffffff' : '#5a6080');
+      sub.setText(learned ? `SP ${skill.cost}` : `Lv${skill.learnLevel}で習得`).setColor(usable ? '#7cf5ff' : '#5a6080');
+      bg.setFillStyle(usable ? 0x34406a : 0x1f2230).setStrokeStyle(3, usable ? 0x7cf5ff : COLOR_FRAME);
+    }
+  }
+
+  private useSkill(id: SkillId | undefined) {
+    if (!id || this.paused || this.tetris.gameOver) return;
+    this.tetris.useSkill(id);
+  }
+
+  private onSkillUsed(id: SkillId) {
+    const skill = SKILLS.find((s) => s.id === id)!;
+    this.popupText(skill.name, '#7cf5ff', 60);
+    if (id === 'bomb') {
+      const flash = this.add.rectangle(BOARD_X + BOARD_W / 2, BOARD_Y + BOARD_H - CELL, BOARD_W, CELL * 2, 0xffa94d, 0.9);
+      this.tweens.add({ targets: flash, alpha: 0, scaleY: 1.6, duration: 350, onComplete: () => flash.destroy() });
+      this.cameras.main.shake(200, 0.01);
+    } else if (id === 'gravity') {
+      this.cameras.main.shake(250, 0.006);
+    } else {
+      this.cameras.main.flash(150, 124, 245, 255);
+    }
   }
 
   private drawCell(g: Phaser.GameObjects.Graphics, x: number, y: number, size: number, color: number, alpha = 1) {
@@ -315,17 +397,27 @@ export class GameScene extends Phaser.Scene {
     if (rows.length >= 4) this.cameras.main.shake(150, 0.006);
   }
 
-  private popupText(text: string, color: string) {
+  // 演出テキスト。重なる場合は少しずらして順番に出す
+  private popupText(text: string, color: string, fontSize = 64) {
+    const now = this.time.now;
+    const delay = Math.max(0, this.nextPopupAt - now);
+    this.nextPopupAt = now + delay + 450;
+    this.time.delayedCall(delay, () => this.showPopup(text, color, fontSize));
+  }
+
+  private showPopup(text: string, color: string, fontSize: number) {
     const t = this.add
       .text(BOARD_X + BOARD_W / 2, BOARD_Y + BOARD_H * 0.4, text, {
         fontFamily: FONT,
-        fontSize: '64px',
+        fontSize: `${fontSize}px`,
         fontStyle: 'bold',
         color,
+        align: 'center',
         stroke: '#000000',
         strokeThickness: 8,
       })
-      .setOrigin(0.5);
+      .setOrigin(0.5)
+      .setDepth(20);
     this.tweens.add({ targets: t, y: t.y - 80, alpha: 0, duration: 900, ease: 'Quad.easeOut', onComplete: () => t.destroy() });
   }
 

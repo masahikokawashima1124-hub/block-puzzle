@@ -34,7 +34,7 @@ export class TitleScene extends Phaser.Scene {
       .text(
         GAME_WIDTH / 2,
         GAME_HEIGHT * 0.85,
-        'PC操作：← → 移動 / ↓ 早く落とす / ↑・X 右回転 / Z 左回転\nスペース 一気に落とす / C ホールド / P 一時停止',
+        'PC操作：← → 移動 / ↓ 早く落とす / ↑・X 右回転 / Z 左回転\nスペース 一気に落とす / C ホールド / 1〜4 スキル / P 一時停止',
         { fontFamily: FONT, fontSize: '22px', color: '#8a90b0', align: 'center', lineSpacing: 8 },
       )
       .setOrigin(0.5);
