@@ -11,7 +11,8 @@ export const ROWS = VISIBLE_ROWS + HIDDEN_ROWS;
 const LOCK_DELAY = 500; // 着地してから固定されるまでの猶予(ms)
 const MAX_LOCK_RESETS = 15; // 着地後に動かして猶予を延ばせる回数
 const LINE_SCORES = [0, 100, 300, 500, 800];
-const LINES_PER_LEVEL = 10;
+const LINES_PER_LEVEL = 5; // 何ライン消すとレベルが上がるか
+const LINES_PER_SPEED_UP = 10; // 何ライン消すと落下が速くなるか
 
 export type Cell = string | null; // ブロックのID（空なら null）
 
@@ -191,7 +192,8 @@ export class Tetris {
   // ---- 内部処理 ----
 
   private gravityInterval(): number {
-    const base = Math.pow(0.8 - (this.level - 1) * 0.007, this.level - 1) * 1000;
+    const speed = Math.floor(this.lines / LINES_PER_SPEED_UP); // 速さの段階（0から）
+    const base = Math.pow(0.8 - speed * 0.007, speed) * 1000;
     return this.isSlowed() ? base * 2 : base;
   }
 

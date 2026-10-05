@@ -42,10 +42,10 @@ describe('Tetris', () => {
     expect(t.piece.type).toBe(current);
   });
 
-  it('10ライン消すとレベルが上がる', () => {
+  it('5ライン消すとレベルが上がる', () => {
     const levels: number[] = [];
     const t = new Tetris({ onLevelUp: (l) => levels.push(l) });
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 5; i++) {
       for (let c = 4; c < COLS; c++) t.grid[ROWS - 1][c] = 'O';
       setPiece(t, 'I', 0, 5);
       t.hardDrop();
@@ -66,10 +66,10 @@ describe('Tetris', () => {
     const learned: string[] = [];
     const t = new Tetris({ onSkillLearned: (s) => learned.push(s.id) });
     expect(t.useSkill('bomb')).toBe(false); // まだ覚えていない
-    t.lines = 9;
+    t.lines = 4;
     for (let c = 4; c < COLS; c++) t.grid[ROWS - 1][c] = 'O';
     setPiece(t, 'I', 0, 5);
-    t.hardDrop(); // 10ライン目でレベル2
+    t.hardDrop(); // 5ライン目でレベル2
     expect(learned).toEqual(['bomb']);
     t.sp = 3;
     t.grid[ROWS - 1][0] = 'O';
