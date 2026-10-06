@@ -15,10 +15,11 @@
 ## コマンド
 - `npm run dev` … 開発サーバー（http://localhost:5173）
 - `npm run build` … `dist/` に公開用ファイルを出力（型チェック込み）
+- `npm run deploy` … テスト → ビルド → GitHub Pages に公開（gh-pages ブランチへ送る。反映まで1〜2分）
 - `npx cap sync` … ビルド結果をスマホアプリ側にコピー（android/ios 追加後）
 
 ## 配布のルート
-- ブラウザ版：`dist/` を itch.io / GitHub Pages 等にアップ
+- ブラウザ版：**公開中** https://masahikokawashima1124-hub.github.io/block-puzzle/ （リポジトリ masahikokawashima1124-hub/block-puzzle は公開設定）。itch.io にも `dist/` の zip で出せる
 - Android：Android Studio + `npx cap add android`（Google Play 登録料 $25）
 - iOS：Mac + Xcode が必須（Apple Developer $99/年）
 - PC（Steam）：Electron 等でラップ
