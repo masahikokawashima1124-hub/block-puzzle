@@ -100,6 +100,23 @@ describe('Tetris', () => {
     expect(t.queue.slice(1, 3)).toEqual(['I3', 'U']); // すぐ NEXT に並ぶ
   });
 
+  it('NEXTの先頭をストックでき、いつでも使える（今のブロックはNEXTに戻る）', () => {
+    const t = new Tetris();
+    const next = t.queue[0];
+    const afterNext = t.queue[1];
+    expect(t.stockNext()).toBe(true);
+    expect(t.stock).toBe(next);
+    expect(t.queue[0]).toBe(afterNext);
+    expect(t.stockNext()).toBe(false); // 1個まで
+
+    const current = t.piece.type;
+    expect(t.useStock()).toBe(true);
+    expect(t.piece.type).toBe(next);
+    expect(t.queue[0]).toBe(current);
+    expect(t.stock).toBe(null);
+    expect(t.useStock()).toBe(false);
+  });
+
   it('上まで積み上がるとゲームオーバー', () => {
     let over = false;
     const t = new Tetris({ onGameOver: () => (over = true) });

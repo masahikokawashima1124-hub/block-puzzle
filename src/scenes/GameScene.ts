@@ -18,6 +18,10 @@ const BUTTON_Y = 1180;
 const BUTTON_H = 150;
 
 const HOLD_BOX = { y: BOARD_Y, h: 140 };
+// HOLD 欄を左右に分けて、右半分を STOCK 欄にする
+const HALF_W = (PANEL_W - 8) / 2;
+const HOLD_X = PANEL_X;
+const STOCK_X = PANEL_X + HALF_W + 8;
 const NEXT_BOX = { y: 270, h: 360 };
 const NEXT_COUNT = 3;
 const SP_Y = NEXT_BOX.y + NEXT_BOX.h + 16;
@@ -33,7 +37,7 @@ const FONT = '"Helvetica Neue", Arial, "Hiragino Sans", "Yu Gothic", sans-serif'
 const COLOR_FRAME = 0x3a3f58;
 const COLOR_BG = 0x14161f;
 
-type Action = 'left' | 'right' | 'down' | 'rotateCW' | 'rotateCCW' | 'hardDrop' | 'hold';
+type Action = 'left' | 'right' | 'down' | 'rotateCW' | 'rotateCCW' | 'hardDrop' | 'hold' | 'stock';
 
 export class GameScene extends Phaser.Scene {
   private tetris!: Tetris;
@@ -129,6 +133,10 @@ export class GameScene extends Phaser.Scene {
       case 'hold':
         t.holdPiece();
         break;
+      case 'stock':
+        if (t.stock) t.useStock();
+        else t.stockNext();
+        break;
     }
   }
 
@@ -163,6 +171,7 @@ export class GameScene extends Phaser.Scene {
       Space: 'hardDrop',
       KeyC: 'hold',
       ShiftLeft: 'hold',
+      KeyV: 'stock',
     };
     kb.addCapture('LEFT,RIGHT,UP,DOWN,SPACE');
     kb.on('keydown', (e: KeyboardEvent) => {
@@ -195,11 +204,11 @@ export class GameScene extends Phaser.Scene {
       this.makeButton(x, BUTTON_Y, w, BUTTON_H, b.label, () => this.press(b.action), () => this.release(b.action));
     });
 
-    // HOLD 枠をタップでホールド
-    const holdZone = this.add
-      .zone(PANEL_X + PANEL_W / 2, HOLD_BOX.y + HOLD_BOX.h / 2, PANEL_W, HOLD_BOX.h)
-      .setInteractive();
+    // HOLD 枠をタップでホールド、STOCK 枠をタップでストック（入っていれば使う）
+    const holdZone = this.add.zone(HOLD_X + HALF_W / 2, HOLD_BOX.y + HOLD_BOX.h / 2, HALF_W, HOLD_BOX.h).setInteractive();
     holdZone.on('pointerdown', () => this.press('hold'));
+    const stockZone = this.add.zone(STOCK_X + HALF_W / 2, HOLD_BOX.y + HOLD_BOX.h / 2, HALF_W, HOLD_BOX.h).setInteractive();
+    stockZone.on('pointerdown', () => this.press('stock'));
 
     // 一時停止ボタン
     this.makeButton(GAME_WIDTH - 60, 55, 72, 72, 'II', () => this.setPaused(true));
@@ -233,14 +242,20 @@ export class GameScene extends Phaser.Scene {
     for (let r = 1; r < VISIBLE_ROWS; r++) g.lineBetween(BOARD_X, BOARD_Y + r * CELL, BOARD_X + BOARD_W, BOARD_Y + r * CELL);
     g.lineStyle(4, COLOR_FRAME).strokeRect(BOARD_X - 2, BOARD_Y - 2, BOARD_W + 4, BOARD_H + 4);
     // 右側の枠
-    for (const box of [HOLD_BOX, NEXT_BOX]) {
-      g.fillStyle(COLOR_BG).fillRect(PANEL_X, box.y, PANEL_W, box.h);
-      g.lineStyle(3, COLOR_FRAME).strokeRect(PANEL_X, box.y, PANEL_W, box.h);
+    const boxes = [
+      { x: HOLD_X, y: HOLD_BOX.y, w: HALF_W, h: HOLD_BOX.h },
+      { x: STOCK_X, y: HOLD_BOX.y, w: HALF_W, h: HOLD_BOX.h },
+      { x: PANEL_X, y: NEXT_BOX.y, w: PANEL_W, h: NEXT_BOX.h },
+    ];
+    for (const b of boxes) {
+      g.fillStyle(COLOR_BG).fillRect(b.x, b.y, b.w, b.h);
+      g.lineStyle(3, COLOR_FRAME).strokeRect(b.x, b.y, b.w, b.h);
     }
-    const label = (y: number, text: string) =>
-      this.add.text(PANEL_X + 10, y + 6, text, { fontFamily: FONT, fontSize: '22px', color: '#8a90b0', fontStyle: 'bold' });
-    label(HOLD_BOX.y, 'HOLD');
-    label(NEXT_BOX.y, 'NEXT');
+    const label = (x: number, y: number, text: string, color = '#8a90b0') =>
+      this.add.text(x + 8, y + 6, text, { fontFamily: FONT, fontSize: '20px', color, fontStyle: 'bold' });
+    label(HOLD_X, HOLD_BOX.y, 'HOLD');
+    label(STOCK_X, HOLD_BOX.y, 'STOCK', '#ffd166');
+    label(PANEL_X, NEXT_BOX.y, 'NEXT');
   }
 
   private createTexts() {
@@ -294,7 +309,8 @@ export class GameScene extends Phaser.Scene {
     const p = this.previewGfx;
     p.clear();
     const cx = PANEL_X + PANEL_W / 2;
-    if (t.hold) this.drawPreview(t.hold, cx, HOLD_BOX.y + 80, t.canHold ? 1 : 0.3);
+    if (t.hold) this.drawPreview(t.hold, HOLD_X + HALF_W / 2, HOLD_BOX.y + 82, t.canHold ? 1 : 0.3, HALF_W - 14);
+    if (t.stock) this.drawPreview(t.stock, STOCK_X + HALF_W / 2, HOLD_BOX.y + 82, 1, HALF_W - 14);
     t.queue.slice(0, NEXT_COUNT).forEach((id, i) => this.drawPreview(id, cx, NEXT_BOX.y + 90 + i * 100, 1));
 
     this.scoreText.setText(String(t.score));
@@ -368,7 +384,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   // ブロックの形を枠の中央に小さく描く
-  private drawPreview(id: string, cx: number, cy: number, alpha: number) {
+  private drawPreview(id: string, cx: number, cy: number, alpha: number, maxW = PANEL_W - 20) {
     const { shape, color } = PIECES[id];
     const cells: [number, number][] = [];
     shape.forEach((row, r) => row.forEach((v, c) => v && cells.push([c, r])));
@@ -376,10 +392,11 @@ export class GameScene extends Phaser.Scene {
     const maxX = Math.max(...cells.map(([c]) => c));
     const minY = Math.min(...cells.map(([, r]) => r));
     const maxY = Math.max(...cells.map(([, r]) => r));
-    const ox = cx - ((maxX - minX + 1) * PREVIEW_CELL) / 2;
-    const oy = cy - ((maxY - minY + 1) * PREVIEW_CELL) / 2;
+    const size = Math.min(PREVIEW_CELL, Math.floor(maxW / (maxX - minX + 1))); // 枠に収まる大きさ
+    const ox = cx - ((maxX - minX + 1) * size) / 2;
+    const oy = cy - ((maxY - minY + 1) * size) / 2;
     for (const [c, r] of cells) {
-      this.drawCell(this.previewGfx, ox + (c - minX) * PREVIEW_CELL, oy + (r - minY) * PREVIEW_CELL, PREVIEW_CELL, color, alpha);
+      this.drawCell(this.previewGfx, ox + (c - minX) * size, oy + (r - minY) * size, size, color, alpha);
     }
   }
 

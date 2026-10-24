@@ -39,6 +39,7 @@ export class Tetris {
   queue: string[] = [];
   hold: string | null = null;
   canHold = true;
+  stock: string | null = null; // ストック中のブロック
   score = 0;
   lines = 0;
   level = 1;
@@ -154,6 +155,24 @@ export class Tetris {
     }
     this.hold = current;
     this.canHold = false;
+  }
+
+  // NEXT の先頭のブロックをストックする（1個まで）
+  stockNext(): boolean {
+    if (this.gameOver || this.stock) return false;
+    this.stock = this.queue.shift()!;
+    this.fillQueue();
+    return true;
+  }
+
+  // ストックしたブロックをいつでも使う。今のブロックは NEXT の先頭に戻る
+  useStock(): boolean {
+    if (this.gameOver || !this.stock) return false;
+    const stocked = this.stock;
+    this.queue.unshift(this.piece.type);
+    this.stock = null;
+    this.spawn(stocked);
+    return true;
   }
 
   // 毎フレーム呼ぶ。dt はミリ秒

@@ -37,6 +37,7 @@
 
 ## 独自要素
 - **スキル**：`src/tetris/skills.ts` に一覧（習得レベル・消費SP）。効果は `Tetris.useSkill()`。SPはライン1本で+1（最大10）。
+- **ストック**：NEXT の先頭を1個しまい、いつでも使える（`stockNext()` / `useStock()`）。HOLD 欄の右半分。
 - **形が増える**：`src/tetris/pieces.ts` の PIECE_STAGES（プレイ時間で追加）。登場時は NEXT に割り込む。
 - 開発中はブラウザのコンソールで `window.game` からゲームを操作できる（公開版には含まれない）。
 
